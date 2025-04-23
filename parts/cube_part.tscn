@@ -1,0 +1,12 @@
+[gd_scene load_steps=3 format=3 uid="uid://dcpv2km45cr5y"]
+
+[ext_resource type="PackedScene" uid="uid://dqpgli6077mh3" path="res://blender_models/Cube.glb" id="1_jfeyq"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_1h204"]
+
+[node name="Cube" instance=ExtResource("1_jfeyq")]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." index="1"]
+transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0)
+shape = SubResource("BoxShape3D_1h204")
+debug_color = Color(0.823043, 0.300596, 0.672935, 0.42)

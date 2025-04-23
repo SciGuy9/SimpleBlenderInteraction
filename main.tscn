@@ -1,0 +1,39 @@
+[gd_scene load_steps=6 format=3 uid="uid://y8l27epu1a6x"]
+
+[ext_resource type="Script" uid="uid://maorg038wt31" path="res://BuildManager.gd" id="1_0xm2m"]
+[ext_resource type="PackedScene" uid="uid://dcpv2km45cr5y" path="res://parts/cube_part.tscn" id="2_h2yge"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_7dm0k"]
+
+[sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_ig7tw"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_0xm2m"]
+
+[node name="Node3D" type="Node3D"]
+
+[node name="Ground" type="StaticBody3D" parent="."]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Ground"]
+transform = Transform3D(10, 0, 0, 0, 10, 0, 0, 0, 10, 0, 0, 0)
+mesh = SubResource("PlaneMesh_7dm0k")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground"]
+shape = SubResource("WorldBoundaryShape3D_ig7tw")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1.19249e-08, 1, 0, -1, 1.19249e-08, 0, 10, 0)
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.642788, 0.766044, 0, -0.766044, 0.642788, 0, 5, 6)
+
+[node name="BuildManager" type="Node3D" parent="." node_paths=PackedStringArray("camera", "placement_marker")]
+script = ExtResource("1_0xm2m")
+part_to_place = ExtResource("2_h2yge")
+camera = NodePath("../Camera3D")
+placement_marker = NodePath("MeshInstance3D")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="BuildManager"]
+transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0)
+transparency = 0.75
+mesh = SubResource("BoxMesh_0xm2m")
+skeleton = NodePath("../..")
