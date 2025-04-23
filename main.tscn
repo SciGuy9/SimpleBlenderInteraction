@@ -22,15 +22,14 @@ mesh = SubResource("PlaneMesh_7dm0k")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Ground"]
 shape = SubResource("WorldBoundaryShape3D_ig7tw")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1.19249e-08, 1, 0, -1, 1.19249e-08, 0, 10, 0)
-
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.642788, 0.766044, 0, -0.766044, 0.642788, 0, 6.94605, 10.5605)
 script = ExtResource("1_h2yge")
 
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="Camera3D"]
+transform = Transform3D(1, 0, 0, 0, 0.766044, 0.642788, 0, -0.642788, 0.766044, 0, 11.2089, -3.07103)
+
 [node name="BuildManager" type="Node3D" parent="." node_paths=PackedStringArray("camera")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 script = ExtResource("1_0xm2m")
 part_scenes = Array[PackedScene]([ExtResource("3_h2yge")])
 camera = NodePath("../Camera3D")
@@ -39,6 +38,7 @@ snap_activation_distance = 10.0
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="BuildManager"]
 transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0)
+visible = false
 transparency = 0.75
 mesh = SubResource("BoxMesh_0xm2m")
 skeleton = NodePath("../..")
