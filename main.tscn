@@ -1,8 +1,8 @@
 [gd_scene load_steps=7 format=3 uid="uid://y8l27epu1a6x"]
 
 [ext_resource type="Script" uid="uid://maorg038wt31" path="res://BuildManager.gd" id="1_0xm2m"]
-[ext_resource type="Script" uid="uid://de05k75uxsoke" path="res://camera_3d.gd" id="1_h2yge"]
-[ext_resource type="PackedScene" uid="uid://dcpv2km45cr5y" path="res://parts/cube_part.tscn" id="2_h2yge"]
+[ext_resource type="Script" path="res://camera_3d.gd" id="1_h2yge"]
+[ext_resource type="PackedScene" uid="uid://bpyanymy56gy0" path="res://parts/cube_with_empties.tscn" id="3_h2yge"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_7dm0k"]
 
@@ -28,11 +28,11 @@ transform = Transform3D(1, 0, 0, 0, 1.19249e-08, 1, 0, -1, 1.19249e-08, 0, 10, 0
 transform = Transform3D(1, 0, 0, 0, 0.642788, 0.766044, 0, -0.766044, 0.642788, 0, 6.94605, 10.5605)
 script = ExtResource("1_h2yge")
 
-[node name="BuildManager" type="Node3D" parent="." node_paths=PackedStringArray("camera", "placement_marker")]
+[node name="BuildManager" type="Node3D" parent="." node_paths=PackedStringArray("camera")]
 script = ExtResource("1_0xm2m")
-part_to_place = ExtResource("2_h2yge")
+part_scenes = Array[PackedScene]([ExtResource("3_h2yge")])
 camera = NodePath("../Camera3D")
-placement_marker = NodePath("MeshInstance3D")
+snap_activation_distance = 25.0
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="BuildManager"]
 transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0)
