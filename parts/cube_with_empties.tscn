@@ -44,6 +44,7 @@ size = Vector3(2, 2, 2)
 [node name="Cube_WithEmpties" type="RigidBody3D"]
 collision_layer = 2
 collision_mask = 3
+mass = 0.001
 gravity_scale = 0.0
 
 [node name="Cube" type="MeshInstance3D" parent="."]

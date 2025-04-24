@@ -1,0 +1,64 @@
+[gd_scene load_steps=5 format=4 uid="uid://duaj5msitvaki"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hxeb2"]
+resource_name = "Material"
+cull_mode = 2
+albedo_color = Color(0.906332, 0.906332, 0.906332, 1)
+roughness = 0.5
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_fodhc"]
+_surfaces = [{
+"aabb": AABB(-1, -2, -1, 2, 2, 2),
+"format": 34896613377,
+"index_count": 84,
+"index_data": PackedByteArray("AAABAAIADAACAAEAAwACAAwADAABAA0ABAADAAwABAAMAA0ADQABAAYADQAGAAQABAAFAAMAAwAFAAIABAAGAAUABwAGAAEAAAAHAAEACAAFAAYABwAIAAYACQACAAUACQAAAAIACAAJAAUADgAAAAkACgAIAAcADwAHAAAACgAHAA8ADwAAAA4ACwAIAAoADwALAAoACwAJAAgADwAOAAsADgAJAAsA"),
+"lods": [0.456494, PackedByteArray("AAABAAIAAwACAAEAAwABAAQAAwAFAAIABAAFAAMABAABAAYABAAGAAUABwAGAAEAAAAHAAEACAAFAAYABwAIAAYACQACAAUACQAAAAIACAAJAAUACgAHAAAACgAIAAcACwAAAAkACgAAAAsACwAJAAgACwAIAAoA")],
+"name": "Material",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 16,
+"vertex_data": PackedByteArray("AAD/P///AAAAAP+/AAAAAAAA/7///wAA/7////+/AAD/v////z8AAP///7///wAA////vwAAAAAAAP8/AAAAAP///z8AAAAA////P///AAD/vwAA/z8AAP+/AAD/vwAA/z////+/AAD/P////z8AAP8/AAD/vwAA/z8AAP8/AAA=")
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_qpanx"]
+resource_name = "Straight_part_Cube"
+_surfaces = [{
+"aabb": AABB(-1, -2, -1, 2, 2, 2),
+"attribute_data": PackedByteArray("/2////+P/7//j////2//v/9v/3//j/8//4//f/+v/2//b/8//0//T/+v/0//T/9v/9//f/+f/3//3/8//5//P/8f/z//X/8//x//f/9f/3//b/8//48AAP+P/z//bwAA/2//v/+P/3//j/+//2//f/9v/3//j/8//4//f/9v/z//r/9v/8//T//P/2//r/9P/8//T/+v/2//r/9P/8//T//f/3//z/9v/9//P//P/2//L/9v/0//T/9P/2//L/9P/y//b/8f/z//L/9P/x//f/8v/2//L/9P/0//T/9P/28="),
+"format": 34896613399,
+"index_count": 84,
+"index_data": PackedByteArray("AAABAAIAAAADAAEAHAAdAB4AHAAfAB0AIAAhACIAIAAjACEAFAAVABYAFAAXABUACgAOACQACgAPAA4AJQAFACYAJQAGAAUAJwAoACkAJwAqACgAKwANAAcAKwAMAA0ALAAtAC4ALAAvAC0AMAAxADIAMAAzADEACwASADQACwATABIANQARAAkANQAQABEANgAEADcANgAIAAQAGAAZABoAGAAbABkA"),
+"lods": [0.456494, PackedByteArray("AAABAAIAAAADAAEABAAFAAYABwAGAAUABAAIAAUACQAIAAQABwAFAAoACQAEAAsACgAMAAcABwAMAA0ACgAOAAwACgAPAA4ACwAQAAkACQAQABEACwASABAACwATABIAFAAVABYAFAAXABUAGAAZABoAGAAbABkA")],
+"material": SubResource("StandardMaterial3D_hxeb2"),
+"name": "Material",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 56,
+"vertex_data": PackedByteArray("AAD/P///VNUAAP+/AABU1QAA/7///1TVAAD/PwAAVNX///8/AAD8xf///7///6rp////vwAAqun/v////z///////z////zF/78AAP+//5//v////7////+/AAD/P//fAAD/vwAA//////+/AAD//wAA/7//////////v/////8AAP8/////n////z////+fAAD/PwAA/9////8/AAD/3////z////+/AAD/v////7////+/////vwAA/z////+/AAD/PwAA//////+/AAD//wAA/78AAP//////PwAA//////8/AABU1f///7///1TV////vwAAVNX///8///9U1f+/////P////z////+/////P////z////+/////v////z////+/////v////z+q6f+/////v6rp/z////+/qukAAP+/AACq6f8/////P6rpAAD/v///qun/P////z////8/AAD/P/+//78AAP+//7//vwAA/z//v/8/AAD/v/+//z8AAP8//MUAAP8////8xf8/AAD/v/zFAAD/PwAA/MX/PwAA/z//3/8/AAD/v/+f/78AAP+//MX/vwAA/z/8xVTVVNVU1VTVVNVU1VTVVNX/HAFGBDX2FQQ19hX/f4Ha/xwBRgAA/3//f3ylAAD/f/9/gdr/f4Ha/398pf9/fKUAAP9/AAD/fwAA/38AAP9///////////////////////+//7//v/+//7//v/+//7+qKqoqqiqqKqoqqiqqKqoq/3//v/9//7//f/+//3//v/9/fKUENfYVBDX2FQlqBLUJagS1CWoEtQlqBLX/f4HaAAD/fwAA/38AAP9/AAD/f/45/pz+Of6c/jn+nP45/pwAAP9/AAD/f/8cAUb/HAFG")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_fodhc")
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wlndt"]
+size = Vector3(1.5, 4, 1.5)
+
+[node name="Straight_part" type="RigidBody3D"]
+collision_layer = 2
+collision_mask = 3
+mass = 0.001
+gravity_scale = 0.0
+
+[node name="Cube" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.8, 0, 0, 0, 2, 0, 0, 0, -0.8, 0, 2, 0)
+mesh = SubResource("ArrayMesh_qpanx")
+skeleton = NodePath("")
+
+[node name="Connect_NZ" type="Marker3D" parent="Cube"]
+transform = Transform3D(1.25, 0, 0, 0, 0.5, 0, 0, 0, -1.25, 0, -2, 0)
+
+[node name="Connect_PZ" type="Marker3D" parent="Cube"]
+transform = Transform3D(1.25, 0, 0, 0, 0.5, 0, 0, 0, -1.25, 0, 0, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape3D_wlndt")

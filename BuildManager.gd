@@ -388,8 +388,16 @@ func find_snap_point(ray_hit_pos: Vector3, nearby_shape_results: Array) -> Trans
 						# Calculate the offset vector from preview origin to preview marker, in world space
 						var offset_in_world = preview_basis * preview_marker_local_transform.origin
 
+						# Inside the loop where markers are compatible:
+						# print("    - Snapping Preview Marker: '", preview_marker.name, "' Local Pos: ", preview_marker.transform.origin)
+						# print("    - Snapping Target Marker: '", target_marker.name, "' Global Pos: ", target_marker.global_transform.origin)
+						# # ... calculate offset_in_world ...
+						# print("    - Calculated Offset in World: ", offset_in_world)
+						# ... calculate snapped_origin ...
+
 						# Calculate the desired global origin for the preview instance
 						var snapped_origin = target_marker_global_transform.origin - offset_in_world
+						# print("    - Calculated Snapped Origin: ", snapped_origin)
 
 						var potential_transform = Transform3D(preview_basis, snapped_origin)
 						# print("              - Calculated potential snap transform: ", potential_transform)

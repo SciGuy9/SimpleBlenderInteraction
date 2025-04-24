@@ -1,8 +1,9 @@
-[gd_scene load_steps=7 format=3 uid="uid://y8l27epu1a6x"]
+[gd_scene load_steps=8 format=3 uid="uid://y8l27epu1a6x"]
 
 [ext_resource type="Script" uid="uid://maorg038wt31" path="res://BuildManager.gd" id="1_0xm2m"]
-[ext_resource type="Script" path="res://camera_3d.gd" id="1_h2yge"]
+[ext_resource type="Script" uid="uid://de05k75uxsoke" path="res://camera_3d.gd" id="1_h2yge"]
 [ext_resource type="PackedScene" uid="uid://bpyanymy56gy0" path="res://parts/cube_with_empties.tscn" id="3_h2yge"]
+[ext_resource type="PackedScene" uid="uid://pwc4iji1ldxf" path="res://parts/straight_part.tscn" id="4_1bvp3"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_7dm0k"]
 
@@ -31,7 +32,7 @@ transform = Transform3D(1, 0, 0, 0, 0.766044, 0.642788, 0, -0.642788, 0.766044, 
 
 [node name="BuildManager" type="Node3D" parent="." node_paths=PackedStringArray("camera")]
 script = ExtResource("1_0xm2m")
-part_scenes = Array[PackedScene]([ExtResource("3_h2yge")])
+part_scenes = Array[PackedScene]([ExtResource("3_h2yge"), ExtResource("4_1bvp3")])
 camera = NodePath("../Camera3D")
 snap_query_radius = 5.0
 snap_activation_distance = 10.0
