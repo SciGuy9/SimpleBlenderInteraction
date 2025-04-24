@@ -12,7 +12,7 @@ extends Node3D
 # How far the initial placement raycast should check
 @export var placement_distance: float = 20.0
 
-# Radius around the raycast hit point to check for nearby parts using a spatial query
+# Radius around the raycast hit point to check for nearby parts using a spatial query (for snapping)
 @export var snap_query_radius: float = 1.5
 
 # How close a target marker must be to the raycast hit point to be considered for snapping
@@ -39,17 +39,23 @@ const BUILD_PARTS_GROUP = "build_parts"
 var preview_instance: Node3D = null
 # Index of the currently selected part in the part_scenes array
 var current_part_index: int = 0
-# Where the object *will* be placed (updated each physics frame)
+# Where the object *will* be placed (updated each physics frame, includes anti-Z-fighting offset)
 var current_placement_transform: Transform3D
-# Flag indicating if the current placement is valid (raycast hit)
+# Flag indicating if the current placement is valid (raycast hit AND no overlap)
 var can_place: bool = false
 # Flag indicating if the current placement is snapped to another part
 var is_snapped: bool = false
 
-# Parameters for the spatial shape query (optimized check for nearby parts)
+# Parameters for the snapping spatial shape query
 var shape_query_parameters: PhysicsShapeQueryParameters3D
-# The shape used for the spatial query (a sphere in this case)
+# The shape used for the snapping spatial query (a sphere)
 var query_shape: SphereShape3D
+
+# Parameters for the overlap check query
+var overlap_query_parameters: PhysicsShapeQueryParameters3D
+# Cache the actual collision shape resource of the current preview part
+var preview_collision_shape_resource: Shape3D = null
+
 # Bitmask for the initial raycast (checks ground AND build parts)
 var raycast_mask: int
 # Bitmask for the shape query (checks ONLY build parts)
@@ -71,7 +77,6 @@ func _ready():
 		return
 
 	# --- Calculate Collision Masks ---
-	# Ensure layers are valid (1 to 32)
 	if build_parts_physics_layer < 1 or build_parts_physics_layer > 32 or \
 	   ground_physics_layer < 1 or ground_physics_layer > 32:
 		printerr("[BuildManager] ERROR: Physics Layers must be between 1 and 32.")
@@ -79,27 +84,37 @@ func _ready():
 	if build_parts_physics_layer == ground_physics_layer:
 		printerr("[BuildManager] WARNING: Build Parts and Ground should be on different physics layers for optimal querying.")
 
-	# Raycast should hit both ground and parts
 	raycast_mask = (1 << (ground_physics_layer - 1)) | (1 << (build_parts_physics_layer - 1))
-	# Shape query should only hit parts
 	shape_query_mask = (1 << (build_parts_physics_layer - 1))
 
-	print("  - Raycast Mask (Binary): ", PackedInt32Array([raycast_mask]).to_byte_array().hex_encode())
-	print("  - Shape Query Mask (Binary): ", PackedInt32Array([shape_query_mask]).to_byte_array().hex_encode())
+	# Optional Debug Prints for masks:
+	print("--- Physics Mask Debug ---")
+	print("Build Parts Layer: ", build_parts_physics_layer)
+	print("Ground Layer: ", ground_physics_layer)
+	print("Calculated Raycast Mask (Decimal): ", raycast_mask)
+	print("Calculated Shape Query Mask (Decimal): ", shape_query_mask)
+	print("Shape Query Mask should ONLY target layer: ", build_parts_physics_layer)
+	# print("--------------------------")
 
-
-	# --- Initialize Spatial Query ---
+	# --- Initialize Snapping Spatial Query ---
 	query_shape = SphereShape3D.new()
 	query_shape.radius = snap_query_radius
-
 	shape_query_parameters = PhysicsShapeQueryParameters3D.new()
 	shape_query_parameters.shape = query_shape
-	shape_query_parameters.collision_mask = shape_query_mask # IMPORTANT: Use the calculated mask
+	shape_query_parameters.collision_mask = shape_query_mask
 	shape_query_parameters.collide_with_bodies = true
 	shape_query_parameters.collide_with_areas = false
-	shape_query_parameters.exclude = [] # Initialize exclude array
+	shape_query_parameters.exclude = []
+	print("  - Snapping Query Radius: ", snap_query_radius)
 
-	print("  - Shape Query Radius: ", snap_query_radius)
+	# --- Initialize Overlap Spatial Query Parameters ---
+	overlap_query_parameters = PhysicsShapeQueryParameters3D.new()
+	# Shape and transform will be set dynamically each frame.
+	overlap_query_parameters.collision_mask = shape_query_mask # Check ONLY against other build parts
+	overlap_query_parameters.collide_with_bodies = true
+	overlap_query_parameters.collide_with_areas = false
+	overlap_query_parameters.exclude = []
+	print("  - Initialized Overlap Query Parameters.")
 
 	# Select the first part initially
 	select_part(0)
@@ -117,120 +132,128 @@ func _input(event):
 			select_part(current_part_index - 1)
 			selected_part_changed = true
 
-		# if selected_part_changed:
-		# 	accept_event() # Consume the event so other things don't use the scroll
+		if selected_part_changed:
+			pass # accept_event() # Consume the event
 
 	# --- Placing the Part ---
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		if can_place and preview_instance: # Check if we have a valid placement spot
-			print("[Input] Attempting to place part.")
+		# Check final can_place flag which includes overlap check
+		if can_place and preview_instance:
+			# print("[Input] Attempting to place part.")
 			place_part()
-		else:
-			print("[Input] Clicked, but cannot place (can_place=", can_place, ", preview_instance valid=", is_instance_valid(preview_instance), ")")
+		# else:
+			# print("[Input] Clicked, but cannot place (can_place=", can_place, ", preview_instance valid=", is_instance_valid(preview_instance), ")")
 
 
 func _physics_process(delta):
-	# Ensure prerequisites are met
+	# --- Prerequisites ---
 	if !camera or !preview_instance:
-		# Hide preview if it somehow exists but shouldn't
 		if is_instance_valid(preview_instance) and preview_instance.visible:
-			# print("[Physics] Hiding preview (no camera or invalid state)")
 			preview_instance.hide()
 		can_place = false
 		return
 
-	# --- 1. Raycasting ---
+	# --- Get Physics State and Mouse Position ---
+	var space_state = get_world_3d().direct_space_state
 	var mouse_pos = get_viewport().get_mouse_position()
+
+	# --- 1. Raycasting ---
 	var ray_origin = camera.project_ray_origin(mouse_pos)
 	var ray_end = ray_origin + camera.project_ray_normal(mouse_pos) * placement_distance
-	var space_state = get_world_3d().direct_space_state # Get physics world state
-
-	# Configure raycast query
 	var ray_query = PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
 	ray_query.collide_with_areas = false
 	ray_query.collide_with_bodies = true
-	ray_query.collision_mask = raycast_mask # Use the specific mask
+	ray_query.collision_mask = raycast_mask
 
 	# Exclude the preview instance from the raycast
+	var exclude_list = []
 	if preview_instance and preview_instance.has_method("get_rid"):
-		ray_query.exclude = [preview_instance.get_rid()]
-	else:
-		ray_query.exclude = []
+		exclude_list = [preview_instance.get_rid()]
+	ray_query.exclude = exclude_list
 
-	# Perform the raycast
 	var result = space_state.intersect_ray(ray_query)
 
-	# --- 2. Process Raycast Result ---
+	# --- Processing ---
+	var potential_placement_transform = Transform3D()
+	var calculated_placement = false
+	var hit_normal = Vector3.UP
+	var snapped_to_part = null # <-- Store the object we snapped to
+
+	is_snapped = false # Reset snap state each frame
+
 	if result:
-		# print("[Physics] Raycast Hit!")
-		can_place = true
+		hit_normal = result.normal
 		var hit_position = result.position
-		var hit_normal = result.normal
-		var hit_collider_node = result.collider as Node # Get the node that was hit
-		# print("  - Hit Position: ", hit_position)
-		# print("  - Hit Normal: ", hit_normal)
-		# print("  - Hit Object: ", hit_collider_node.name if is_instance_valid(hit_collider_node) else "Invalid/Null")
 
-
-		# --- 3. OPTIMIZED: Spatial Query for Nearby Parts ---
-		shape_query_parameters.transform = Transform3D(Basis.IDENTITY, hit_position) # Center query shape at hit pos
-
-		# Exclude the preview instance from the shape query too
-		if preview_instance and preview_instance.has_method("get_rid"):
-			shape_query_parameters.exclude = [preview_instance.get_rid()]
-		else:
-			shape_query_parameters.exclude = []
-
-		# print("  - Performing Shape Query at: ", hit_position)
+		# --- Snapping Check ---
+		shape_query_parameters.transform = Transform3D(Basis.IDENTITY, hit_position)
+		shape_query_parameters.exclude = exclude_list # Exclude preview
 		var nearby_results = space_state.intersect_shape(shape_query_parameters)
-		# print("  - Found ", nearby_results.size(), " nearby objects.")
 
-		# --- ADD THIS ---
-		if nearby_results.size() > 0:
-			for collision_info in nearby_results:
-				var obj = collision_info.collider
-		# --- End of Add ---
+		# Call modified find_snap_point
+		var snap_result: Dictionary = find_snap_point(hit_position, nearby_results)
 
-		# --- 4. Snapping Calculation (using nearby_results) ---
-		is_snapped = false
-		# print("  - Calling find_snap_point...")
-		var potential_snap_transform = find_snap_point(hit_position, nearby_results)
-
-
-		# --- 5. Determine Final Placement Transform & Update Preview ---
-		if potential_snap_transform != Transform3D(): # Check if find_snap_point returned a valid (non-default) Transform
-			# print("  - Snapping SUCCESSFUL!")
-			current_placement_transform = potential_snap_transform
+		# Determine potential base transform
+		if snap_result != {}: # Check if dictionary was returned
+			potential_placement_transform = snap_result.transform
+			snapped_to_part = snap_result.target_part # <-- Get the target part
 			is_snapped = true
-			# Apply a tiny offset along the hit normal when snapped to avoid physics fighting
-			# Adjust multiplier if needed, depends on snapping calculation precision
-			# current_placement_transform.origin += hit_normal * 0.001
+			calculated_placement = true # Found a potential placement via snapping
 		else:
-			# print("  - Snapping FAILED or N/A. Using default placement.")
-			# Default placement: Place slightly above the surface pointed at
-			current_placement_transform = Transform3D(Basis.IDENTITY, hit_position + hit_normal * 0.01)
-			# Optional: Basic rotation alignment (can conflict with snapping)
-			# current_placement_transform = current_placement_transform.looking_at(hit_position + hit_normal, Vector3.UP)
+			# No snap, use default placement if ray hit
+			potential_placement_transform = Transform3D(Basis.IDENTITY, hit_position)
+			is_snapped = false
+			calculated_placement = true # Found a potential placement via raycast
 
-		# Update preview instance position and visibility
+	# --- Overlap Check ---
+	var is_overlapping = false
+	if calculated_placement: # Only check overlap if we have a potential spot
+		if preview_collision_shape_resource:
+			overlap_query_parameters.transform = potential_placement_transform
+			overlap_query_parameters.shape = preview_collision_shape_resource
+
+			# --- ADJUST EXCLUSION LIST ---
+			var current_exclude_list = []
+			# Always exclude the preview instance itself
+			if preview_instance and preview_instance.has_method("get_rid"):
+				current_exclude_list.append(preview_instance.get_rid())
+			# *IF SNAPPED*, also exclude the object we snapped onto
+			if is_snapped and is_instance_valid(snapped_to_part) and snapped_to_part.has_method("get_rid"):
+				current_exclude_list.append(snapped_to_part.get_rid())
+				# print("  - Overlap Check: Excluding preview AND snap target '", snapped_to_part.name, "'")
+			# else:
+				# print("  - Overlap Check: Excluding only preview.")
+
+			overlap_query_parameters.exclude = current_exclude_list
+			# --- END ADJUSTMENT ---
+
+			var overlap_results = space_state.intersect_shape(overlap_query_parameters)
+			if not overlap_results.is_empty():
+				is_overlapping = true
+				# print("    - OVERLAP DETECTED with other objects!")
+		else:
+			# print("Warning: Cannot check overlap, preview shape missing.")
+			is_overlapping = true # Prevent placement if shape is missing
+
+	# --- Final Decision ---
+	# Allow placement if we calculated a spot AND it's not overlapping
+	# (Overlap check now correctly excludes snap target if needed)
+	can_place = calculated_placement and not is_overlapping
+
+	if can_place:
+		# Apply anti-Z-fighting offset
+		var offset_amount = 0.005 if is_snapped else 0.01
+		current_placement_transform = potential_placement_transform
+		current_placement_transform.origin += hit_normal * offset_amount
+
+		# Update preview
 		preview_instance.global_transform = current_placement_transform
-		# TODO: Update preview material color based on `is_snapped` for visual feedback
-		# Example (requires finding the MeshInstance3D child):
-		# var mesh = find_mesh_instance_recursive(preview_instance)
-		# if mesh and mesh.material_override:
-		# 	 mesh.material_override.albedo_color = Color.GREEN if is_snapped else Color(1,1,1,0.5)
-
 		if not preview_instance.visible:
-			# print("[Physics] Showing Preview Instance.")
 			preview_instance.show()
-
 	else:
-		# No raycast hit
-		# print("[Physics] Raycast Miss.")
-		can_place = false
-		is_snapped = false
+		# Cannot place
+		is_snapped = false # Reset snap state if cannot place
 		if is_instance_valid(preview_instance) and preview_instance.visible:
-			# print("[Physics] Hiding Preview Instance.")
 			preview_instance.hide()
 
 
@@ -241,183 +264,167 @@ func select_part(index: int):
 		printerr("[SelectPart] No part scenes available!")
 		return
 
-	# Clamp index to wrap around the available parts
 	current_part_index = wrap(index, 0, part_scenes.size())
+	# print("[SelectPart] Selected part index: ", current_part_index)
 
 	# Remove old preview instance if it exists
 	if is_instance_valid(preview_instance):
-		print("  - Removing old preview instance.")
+		# print("  - Removing old preview instance.")
 		preview_instance.queue_free()
-		preview_instance = null # Clear reference immediately
+		preview_instance = null
+		preview_collision_shape_resource = null # Clear cached shape
 
 	# Create new preview instance
 	var selected_scene = part_scenes[current_part_index]
 	if selected_scene:
-		print("  - Instantiating preview for: ", selected_scene.resource_path)
+		# print("  - Instantiating preview for: ", selected_scene.resource_path)
 		preview_instance = selected_scene.instantiate()
+
+		# Hide immediately before adding to tree
+		preview_instance.hide()
+
+		# Cache the Collision Shape Resource
+		var collision_shape_node = find_collision_shape_recursive(preview_instance)
+		if collision_shape_node and collision_shape_node.shape:
+			preview_collision_shape_resource = collision_shape_node.shape
+			# print("    - Cached Collision Shape Resource: ", preview_collision_shape_resource)
+		else:
+			preview_collision_shape_resource = null
+			print("    - WARNING: Could not find valid CollisionShape3D/Shape resource in preview part!")
 
 		# Configure preview to be non-interactive and transparent
 		if preview_instance is CollisionObject3D:
-			# Disable collision response (important!)
-			preview_instance.set_collision_layer_value(build_parts_physics_layer, false) # Turn off its own layer
-			preview_instance.set_collision_mask_value(build_parts_physics_layer, false) # Don't collide with other parts
-			preview_instance.set_collision_mask_value(ground_physics_layer, false) # Don't collide with ground
-			# For RigidBody3D, also freeze it
+			preview_instance.set_collision_layer_value(build_parts_physics_layer, false)
+			preview_instance.set_collision_mask_value(build_parts_physics_layer, false)
+			preview_instance.set_collision_mask_value(ground_physics_layer, false)
 			if preview_instance is RigidBody3D:
 				preview_instance.freeze = true
-				print("    - Froze RigidBody3D preview.")
-			print("    - Disabled collision for preview.")
+			# print("    - Disabled collision for preview.")
 
-
-		# Find the mesh to make transparent (adjust child node path if needed)
+		# Apply transparent material override
 		var mesh_instance = find_mesh_instance_recursive(preview_instance)
 		if mesh_instance:
 			var mat = StandardMaterial3D.new()
 			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			mat.albedo_color = Color(1.0, 1.0, 1.0, 0.5) # White, 50% transparent
-			mat.cull_mode = BaseMaterial3D.CULL_DISABLED # Optional: Render both sides if needed
+			mat.cull_mode = BaseMaterial3D.CULL_DISABLED # Optional
 			mesh_instance.material_override = mat
-			print("    - Applied transparent material override.")
-		else:
-			print("    - WARNING: Could not find MeshInstance3D in preview part to apply material.")
+			# print("    - Applied transparent material override.")
+		# else: print("    - WARNING: Could not find MeshInstance3D in preview part.")
 
-		# Add preview instance as a child of BuildManager (so it's not part of the main placed objects scene)
+		# Add preview instance as a child of BuildManager
 		add_child(preview_instance)
-		preview_instance.hide() # Hide initially until placement is calculated
-		print("  - Preview instance created and configured.")
+		# print("  - Preview instance created and added to BuildManager (hidden).")
 	else:
 		preview_instance = null
+		preview_collision_shape_resource = null
 		printerr("[SelectPart] ERROR: Selected part scene at index ", current_part_index, " is null!")
 
 
 func place_part():
+	# Use the final can_place flag, which includes the overlap check
+	if not can_place or not preview_instance:
+		# print("[PlacePart] Cannot place part (can_place=", can_place, ", preview valid=", is_instance_valid(preview_instance), ")")
+		return
+
 	var scene_to_instantiate = part_scenes[current_part_index]
 	if !scene_to_instantiate:
 		printerr("[PlacePart] ERROR: Cannot place null part scene!")
 		return
 
-	print("[PlacePart] Instantiating final part: ", scene_to_instantiate.resource_path)
+	# print("[PlacePart] Instantiating final part: ", scene_to_instantiate.resource_path)
 	var new_part = scene_to_instantiate.instantiate()
 
 	if new_part is Node3D:
-		# Add the part to the main scene tree (assumes BuildManager is NOT the root of the main scene)
-		# If BuildManager IS the root, use get_parent().add_child(new_part) or adjust logic
+		# Add the part to the main scene tree
 		get_tree().current_scene.add_child(new_part)
 
-		new_part.global_transform = current_placement_transform # Use calculated transform (snapped or free)
-		print("  - Placed part at Global Transform: ", new_part.global_transform)
+		# Use the final transform which includes the anti-Z-fighting offset
+		new_part.global_transform = current_placement_transform
+		# print("  - Placed part at Global Transform: ", new_part.global_transform)
 
-		# Add to group for potential future use (though not used by current snapping)
+		# Add to group
 		new_part.add_to_group(BUILD_PARTS_GROUP)
-		print("  - Added part to group: ", BUILD_PARTS_GROUP)
+		# print("  - Added part to group: ", BUILD_PARTS_GROUP)
 
-		# If it's a RigidBody and was placed snapped, ensure it's active
+		# Wake up RigidBody
 		if new_part is RigidBody3D:
-			new_part.sleeping = false # Wake it up
+			new_part.sleeping = false
 
-		# Prepare for next placement: Re-select the current part to create a *new* preview
-		# This prevents trying to interact with the just-placed visible object.
+		# Prepare for next placement: Reset preview
 		var idx_to_reselect = current_part_index
 		if is_instance_valid(preview_instance):
-			preview_instance.queue_free() # Ensure old preview is gone
-		preview_instance = null # Invalidate current preview handle
-		print("  - Resetting preview instance.")
-		select_part(idx_to_reselect) # Generate a fresh preview
+			preview_instance.queue_free()
+		preview_instance = null
+		# print("  - Resetting preview instance.")
+		select_part(idx_to_reselect)
 
 	else:
 		printerr("[PlacePart] ERROR: Instantiated part is not a Node3D!")
-		new_part.queue_free() # Clean up if it's the wrong type
+		new_part.queue_free()
 
 
 ## --- SNAPPING LOGIC CORE ---
 
 # Finds the best snap point based on nearby objects and marker compatibility
-func find_snap_point(ray_hit_pos: Vector3, nearby_shape_results: Array) -> Transform3D:
-	# print("[FindSnapPoint] Checking for snaps near hit position: ", ray_hit_pos)
-	var best_snap_transform = Transform3D() # Default Identity transform signifies "no snap"
+# Finds the best snap point and the object snapped to.
+# Returns: Dictionary { "transform": Transform3D, "target_part": Node3D } or null if no snap.
+func find_snap_point(ray_hit_pos: Vector3, nearby_shape_results: Array) -> Dictionary:
+	var best_snap_transform = Transform3D()
+	var best_target_part = null # <-- Store the target part
 	var found_snap = false
-	# Use squared distances for efficiency (avoid sqrt)
 	var min_dist_sq = snap_activation_distance * snap_activation_distance
-	var closest_valid_snap_dist_sq = INF # Keep track of the closest valid snap found
+	var closest_valid_snap_dist_sq = INF
 
 	var preview_markers = get_markers(preview_instance)
 	if preview_markers.is_empty():
-		# print("  - No markers found on preview instance. Cannot snap.")
-		return best_snap_transform # No markers on preview, cannot snap
+		return {};
 
-	# print("  - Preview Markers: ", preview_markers.map(func(m): return m.name))
-
-	# --- Iterate through ONLY the nearby objects found by intersect_shape ---
-	# print("  - Checking ", nearby_shape_results.size(), " nearby objects from shape query.")
 	for collision_info in nearby_shape_results:
 		var existing_part = collision_info.collider as Node3D
-		if not is_instance_valid(existing_part): continue # Skip if instance is somehow invalid
+		if not is_instance_valid(existing_part): continue
 
-		# print("    - Checking existing part: ", existing_part.name)
 		var target_markers = get_markers(existing_part)
-		if target_markers.is_empty():
-			# print("      - No markers found on this existing part. Skipping.")
-			continue # Skip parts with no markers
+		if target_markers.is_empty(): continue
 
-		# print("      - Target Markers: ", target_markers.map(func(m): return m.name))
-
-		# --- Compare Markers ---
 		for target_marker in target_markers:
 			var target_marker_global_pos = target_marker.global_position
-			# Check if this target marker is close enough to where the player is pointing
 			var dist_sq_to_hit = target_marker_global_pos.distance_squared_to(ray_hit_pos)
 
-			# print("        - Target Marker '", target_marker.name, "' at ", target_marker_global_pos)
-			# print("          - DistanceSq to RayHit: ", dist_sq_to_hit, " (ThresholdSq: ", min_dist_sq, ")")
-
 			if dist_sq_to_hit < min_dist_sq:
-				# print("          - Target marker is close enough to ray hit!")
-				# Now check compatible markers on the preview part
 				for preview_marker in preview_markers:
-					# print("            - Comparing with Preview Marker '", preview_marker.name, "'")
 					if are_markers_compatible(target_marker.name, preview_marker.name):
-						# print("              - COMPATIBLE pair found!")
-						# --- Calculate Snapped Transform ---
-						# Basic Position Snap (No Rotation Yet - Assumes markers face opposite directions implicitly):
+						# Calculate Snapped Transform (Position Only)
 						var target_marker_global_transform = target_marker.global_transform
 						var preview_marker_local_transform = preview_marker.transform
-
-						# TODO: Calculate desired rotation (Basis) for alignment
-						var preview_basis = Basis.IDENTITY # No rotation applied yet
-
-						# Calculate the offset vector from preview origin to preview marker, in world space
+						var preview_basis = Basis.IDENTITY
 						var offset_in_world = preview_basis * preview_marker_local_transform.origin
-
-						# Calculate the desired global origin for the preview instance
 						var snapped_origin = target_marker_global_transform.origin - offset_in_world
-
 						var potential_transform = Transform3D(preview_basis, snapped_origin)
-						# print("              - Calculated potential snap transform: ", potential_transform)
 
-						# Check if this snap point is the closest valid one found so far
+						# Check if this is the closest valid snap
 						if dist_sq_to_hit < closest_valid_snap_dist_sq:
-							# print("              - This is the NEW closest valid snap!")
 							closest_valid_snap_dist_sq = dist_sq_to_hit
 							best_snap_transform = potential_transform
+							best_target_part = existing_part # <-- Store the target
 							found_snap = true
-						# else:
-							# print("              - Found compatible snap, but it's further than a previous one.")
-
-						# Optional: break inner loop if only one snap per target marker is desired
-						# break
-	# End of loops
 
 	if found_snap:
-		# print("[FindSnapPoint] Returning BEST snap transform: ", best_snap_transform)
-		return best_snap_transform
+		# Return dictionary with results
+		return {
+			"transform": best_snap_transform,
+			"target_part": best_target_part
+		}
 	else:
-		# print("[FindSnapPoint] No compatible snaps found.")
-		return Transform3D() # Return default Identity transform
+		# Return null if no snap found
+		return {}
 
 
 ## --- HELPER FUNCTIONS ---
 
-# Helper to get Marker3D children with the correct prefix (non-recursive)
+# Choose ONE of these get_markers implementations based on your scene structure:
+
+# OPTION A: Non-Recursive (Use if markers are DIRECT children of the root node in part scenes)
 # func get_markers(parent_node: Node) -> Array[Marker3D]:
 # 	var markers: Array[Marker3D] = []
 # 	if not parent_node: return markers
@@ -426,24 +433,20 @@ func find_snap_point(ray_hit_pos: Vector3, nearby_shape_results: Array) -> Trans
 # 			markers.append(child)
 # 	return markers
 
-# RECURSIVE Helper to get Marker3D children with the correct prefix from any depth
+# OPTION B: Recursive (Use if markers might be nested deeper)
 func get_markers(parent_node: Node) -> Array[Marker3D]:
 	var markers: Array[Marker3D] = []
-	_find_markers_recursive(parent_node, markers) # Start the recursive search
+	if parent_node:
+		_find_markers_recursive(parent_node, markers)
 	return markers
 
-# Internal recursive function - DO NOT call this directly from elsewhere
 func _find_markers_recursive(current_node: Node, markers_array: Array[Marker3D]):
-	if not is_instance_valid(current_node):
-		return
-
-	# Check the current node itself
+	if not is_instance_valid(current_node): return
 	if current_node is Marker3D and current_node.name.begins_with(SNAP_MARKER_PREFIX):
 		markers_array.append(current_node)
-
-	# Recursively check all children
 	for child in current_node.get_children():
 		_find_markers_recursive(child, markers_array)
+
 
 # Helper to find the first MeshInstance3D in a node hierarchy (recursive)
 func find_mesh_instance_recursive(node: Node) -> MeshInstance3D:
@@ -455,17 +458,26 @@ func find_mesh_instance_recursive(node: Node) -> MeshInstance3D:
 			return found
 	return null
 
+# Helper to find the first CollisionShape3D node in a hierarchy (recursive)
+func find_collision_shape_recursive(node: Node) -> CollisionShape3D:
+	if node is CollisionShape3D:
+		return node
+	for child in node.get_children():
+		var found = find_collision_shape_recursive(child)
+		if found:
+			return found
+	return null
+
+
 # Check if two markers can connect based on naming convention
-# Example: Connect_PX connects to Connect_NX
 func are_markers_compatible(marker_name1: StringName, marker_name2: StringName) -> bool:
-	# Convert StringName to String for easier manipulation if needed, though comparisons work
 	var s_name1 = str(marker_name1)
 	var s_name2 = str(marker_name2)
 
 	if not s_name1.begins_with(SNAP_MARKER_PREFIX) or not s_name2.begins_with(SNAP_MARKER_PREFIX):
-		return false # Doesn't follow convention
+		return false
 
-	var type1 = s_name1.trim_prefix(SNAP_MARKER_PREFIX) # e.g., "PX", "NY"
+	var type1 = s_name1.trim_prefix(SNAP_MARKER_PREFIX)
 	var type2 = s_name2.trim_prefix(SNAP_MARKER_PREFIX)
 
 	# Check for opposite pairs (case-sensitive)
@@ -473,8 +485,7 @@ func are_markers_compatible(marker_name1: StringName, marker_name2: StringName) 
 	if type1 == "NX" and type2 == "PX": return true
 	if type1 == "PY" and type2 == "NY": return true
 	if type1 == "NY" and type2 == "PY": return true
-	if type1 == "PZ" and type2 == "NZ": return true
-	if type1 == "NZ" and type2 == "PZ": return true
+	if type1 == "PZ" and type2 == "NZ": return true # Keep if using Z-axis markers
+	if type1 == "NZ" and type2 == "PZ": return true # Keep if using Z-axis markers
 
-	# print("      - Compatibility Check: '", type1, "' vs '", type2, "' -> FALSE")
-	return false # Not a compatible pair
+	return false
